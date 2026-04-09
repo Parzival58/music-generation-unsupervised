@@ -48,7 +48,7 @@ def train_autoencoder(epochs=20, batch_size=64, learning_rate=1e-3, seq_length=6
     
     model = LSTMAutoencoder(seq_length=seq_length).to(device)
     # Mean Squared Error Loss matches your assignment's L_AE formula
-    criterion = nn.MSELoss() 
+    criterion = nn.MSELoss(reduction='sum')
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
     loss_history = []
