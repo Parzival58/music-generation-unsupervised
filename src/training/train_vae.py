@@ -15,9 +15,16 @@ from src.preprocessing.midi_parser import load_midi, midi_to_piano_roll
 from src.preprocessing.piano_roll import LazyMIDIDataset
 
 def vae_loss_function(recon_x, x, mu, logvar, beta):
+    # MSE Reconstruction
     recon_loss = nn.functional.mse_loss(recon_x, x, reduction='sum')
+    # KL Divergence
     kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    return recon_loss + (beta * kld_loss), recon_loss, kld_loss
+    
+    # Sparsity Penalty: Discourage the model from outputting absolute zero
+    # We want at least a small percentage of notes to be active
+    sparsity_loss = torch.abs(torch.mean(recon_x) - 0.02) * 100
+    
+    return recon_loss + (beta * kld_loss) + sparsity_loss, recon_loss, kld_loss
 
 def train_vae(epochs=50, batch_size=64, learning_rate=1e-3, num_files=100):
     print(f"--- Preparing VAE Dataset ({num_files} files) ---")
@@ -40,15 +47,13 @@ def train_vae(epochs=50, batch_size=64, learning_rate=1e-3, num_files=100):
     model = LSTMVAE(seq_length=64).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
-    history = {'total': [], 'recon': [], 'kld': []}
-
-    print(f"--- Starting VAE Training Loop ---")
+    print(f"--- Starting VAE Training Loop (Sparsity Guard Active) ---")
     for epoch in range(epochs):
         model.train()
-        # Using a much smaller beta (max 0.01) to prioritize reconstruction
-        beta = min(0.01, (epoch / 25.0) * 0.01) 
+        # Even smaller beta to prioritize keeping the signal alive
+        beta = min(0.005, (epoch / 25.0) * 0.005) 
         
-        t_loss_accum, r_loss_accum, k_loss_accum = 0, 0, 0
+        t_loss_accum, r_loss_accum = 0, 0
         for inputs, _ in dataloader:
             inputs = inputs.to(device)
             optimizer.zero_grad()
@@ -59,11 +64,8 @@ def train_vae(epochs=50, batch_size=64, learning_rate=1e-3, num_files=100):
             
             t_loss_accum += loss.item()
             r_loss_accum += recon_val.item()
-            k_loss_accum += kld_val.item()
             
-        avg_t = t_loss_accum / len(dataloader)
-        history['total'].append(avg_t)
-        print(f"Epoch [{epoch+1}/{epochs}] Beta: {beta:.4f} | Total: {avg_t:.2f} | Recon: {r_loss_accum/len(dataloader):.2f}")
+        print(f"Epoch [{epoch+1}/{epochs}] Beta: {beta:.5f} | Total Loss: {t_loss_accum/len(dataloader):.2f} | Recon: {r_loss_accum/len(dataloader):.2f}")
 
     os.makedirs('outputs/generated_midis', exist_ok=True)
     torch.save(model.state_dict(), 'outputs/generated_midis/lstm_vae.pth')
