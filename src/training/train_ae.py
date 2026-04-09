@@ -26,12 +26,13 @@ def train_autoencoder(epochs=20, batch_size=64, learning_rate=1e-3, seq_length=6
     all_sequences = []
     # Note: We use the first 50 files here just to make sure the code works. 
     # Later, you can remove '[:50]' to train on the entire dataset!
-    for file in midi_files[:50]: 
-        midi_data = load_midi(file)
-        piano_roll = midi_to_piano_roll(midi_data)
-        if piano_roll is not None and piano_roll.shape[0] > seq_length:
-            seqs = create_sequences(piano_roll, seq_length=seq_length)
-            all_sequences.append(seqs)
+    for idx, file in enumerate(midi_files[:50]): 
+            print(f"Processing file {idx + 1}/50...") # Add this line!
+            midi_data = load_midi(file)
+            piano_roll = midi_to_piano_roll(midi_data)
+            if piano_roll is not None and piano_roll.shape[0] > seq_length:
+                seqs = create_sequences(piano_roll, seq_length=seq_length)
+                all_sequences.append(seqs)
             
     # Combine all individual song chunks into one massive matrix
     full_data = np.concatenate(all_sequences, axis=0)
