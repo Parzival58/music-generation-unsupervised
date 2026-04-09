@@ -8,6 +8,7 @@ import torch.optim as optim
 from torch.utils.data import DataLoader
 import matplotlib.pyplot as plt
 
+# Path setup for internal imports
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
 from src.models.vae import LSTMVAE
@@ -15,11 +16,12 @@ from src.preprocessing.midi_parser import load_midi, midi_to_piano_roll
 from src.preprocessing.piano_roll import LazyMIDIDataset
 
 def vae_loss_function(recon_x, x, mu, logvar, beta):
-    # Reconstruction Loss (MSE)
+    """
+    VAE Loss = Reconstruction Loss + Beta * KL Divergence
+    """
     recon_loss = nn.functional.mse_loss(recon_x, x, reduction='sum')
-    # KL Divergence
+    # KL Divergence formula
     kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
-    # Apply Beta weighting to KLD
     return recon_loss + (beta * kld_loss), recon_loss, kld_loss
 
 def train_vae(epochs=20, batch_size=64, learning_rate=1e-3, num_files=50):
@@ -30,6 +32,10 @@ def train_vae(epochs=20, batch_size=64, learning_rate=1e-3, num_files=50):
     
     for i, file in enumerate(midi_files):
         if processed_count >= num_files: break
+        
+        print(f"[{processed_count + 1}/{num_files}] Loading: {os.path.basename(file)}...", end="\r")
+        sys.stdout.flush()
+        
         midi_data = load_midi(file)
         piano_roll = midi_to_piano_roll(midi_data)
         if piano_roll is not None and piano_roll.shape[0] > 64:
@@ -45,11 +51,11 @@ def train_vae(epochs=20, batch_size=64, learning_rate=1e-3, num_files=50):
     
     history = {'total': [], 'recon': [], 'kld': []}
 
-    print("--- Starting VAE Training with Beta-Annealing ---")
+    print(f"\n--- Starting VAE Training on {device} ---")
     for epoch in range(epochs):
         model.train()
-        # Beta Annealing: Slowly increase beta from 0 to 0.1 over the first 10 epochs
-        beta = min(0.1, (epoch / 10.0) * 0.1) 
+        # Anneal beta from 0.0 to 0.1 over the first 10 epochs
+        beta = min(0.1, (epoch / 10.0) * 0.1) if epochs > 1 else 0.1
         
         t_loss_accum, r_loss_accum, k_loss_accum = 0, 0, 0
         for inputs, _ in dataloader:
@@ -71,17 +77,21 @@ def train_vae(epochs=20, batch_size=64, learning_rate=1e-3, num_files=50):
         
         print(f"Epoch [{epoch+1}/{epochs}] Beta: {beta:.3f} | Total: {avg_t:.2f} | Recon: {history['recon'][-1]:.2f} | KLD: {history['kld'][-1]:.2f}")
 
+    # Save deliverables
     os.makedirs('outputs/generated_midis', exist_ok=True)
     os.makedirs('outputs/plots', exist_ok=True)
     torch.save(model.state_dict(), 'outputs/generated_midis/lstm_vae.pth')
     
     plt.figure(figsize=(10, 5))
-    plt.plot(history['recon'], label='Recon Loss')
-    plt.plot(history['kld'], label='KLD Loss')
-    plt.title('Task 2: VAE Loss Components')
+    plt.plot(history['recon'], label='Reconstruction Loss')
+    plt.plot(history['kld'], label='KL Divergence Loss')
+    plt.title('Task 2: VAE Loss Components (Beta-Annealing)')
+    plt.xlabel('Epochs')
+    plt.ylabel('Loss Sum')
     plt.legend()
+    plt.grid(True)
     plt.savefig('outputs/plots/task2_vae_loss.png')
-    print("--- Training Finished ---")
+    print("--- VAE Training Complete ---")
 
 if __name__ == "__main__":
     train_vae()
