@@ -1,0 +1,15 @@
+# Datasets
+data/raw_midi/
+data/processed/
+data/train_test_split/
+
+# Generated Outputs
+outputs/generated_midis/
+outputs/plots/
+outputs/survey_results/
+
+# Python caches and notebooks
+__pycache__/
+*.pyc
+.ipynb_checkpoints/
+.DS_Store
