@@ -1,38 +1,46 @@
-import numpy as np
 import torch
 from torch.utils.data import Dataset
+import numpy as np
+
+class LazyMIDIDataset(Dataset):
+    """
+    Memory-efficient dataset that slices piano rolls on-the-fly.
+    Prevents Out-of-Memory (OOM) crashes in Colab.
+    """
+    def __init__(self, piano_rolls, seq_length=64):
+        # Store piano rolls as tensors and normalize 0-127 to 0.0-1.0
+        self.piano_rolls = [torch.tensor(pr, dtype=torch.float32) / 127.0 for pr in piano_rolls]
+        self.seq_length = seq_length
+        
+        # Pre-calculate a mapping of (song_index, start_time_step)
+        self.mapping = []
+        for song_idx, pr in enumerate(self.piano_rolls):
+            num_possible_seqs = pr.shape[0] - seq_length
+            if num_possible_seqs > 0:
+                for start_offset in range(num_possible_seqs):
+                    self.mapping.append((song_idx, start_offset))
+                
+    def __len__(self):
+        return len(self.mapping)
+        
+    def __getitem__(self, idx):
+        song_idx, start = self.mapping[idx]
+        # Slice the sequence from the full song on demand
+        sequence = self.piano_rolls[song_idx][start : start + self.seq_length, :]
+        return sequence, sequence
 
 def create_sequences(piano_roll, seq_length=64):
-    """
-    Slices a continuous 2D piano roll into fixed-length sequences using a sliding window.
-    
-    Args:
-        piano_roll (numpy.ndarray): Shape (total_time_steps, 128).
-        seq_length (int): The number of time steps per sequence.
-        
-    Returns:
-        numpy.ndarray: Shape (num_sequences, seq_length, 128).
-    """
+    """Legacy helper for Task 1 compatibility."""
     sequences = []
-    # Slide a window of size `seq_length` across the time axis
-    for i in range(0, piano_roll.shape[0] - seq_length):
-        seq = piano_roll[i : i + seq_length, :]
-        sequences.append(seq)
-        
+    for i in range(len(piano_roll) - seq_length):
+        sequences.append(piano_roll[i : i + seq_length])
     return np.array(sequences)
 
 class MIDIDataset(Dataset):
-    """
-    PyTorch Dataset wrapper for our segmented MIDI sequences.
-    """
+    """Legacy class to prevent import errors in older scripts."""
     def __init__(self, sequences):
-        # Convert numpy arrays to PyTorch float tensors and normalize velocities to [0, 1]
         self.sequences = torch.tensor(sequences, dtype=torch.float32) / 127.0
-        
     def __len__(self):
         return len(self.sequences)
-        
     def __getitem__(self, idx):
-        # For an Autoencoder, the input and the target are exactly the same!
-        seq = self.sequences[idx]
-        return seq, seq
+        return self.sequences[idx], self.sequences[idx]
