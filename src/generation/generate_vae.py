@@ -7,7 +7,7 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from src.models.vae import LSTMVAE
 from src.generation.midi_export import piano_roll_to_midi
 
-def generate_vae_samples(num_samples=5, latent_dim=128, seq_length=64):
+def generate_vae_samples(num_samples=8, latent_dim=128, seq_length=64):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = LSTMVAE(seq_length=seq_length, latent_dim=latent_dim).to(device)
     
