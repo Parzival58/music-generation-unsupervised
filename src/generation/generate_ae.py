@@ -15,8 +15,8 @@ def generate_ae_samples(num_samples=5, latent_dim=256, seq_length=64):
     
     model = LSTMAutoencoder(seq_length=seq_length, hidden_dim=latent_dim).to(device)
     
-    # Use the absolute path to guarantee we find the weights no matter what directory Colab is in
-    weight_path = os.path.join(BASE_DIR, 'outputs/generated_midis/lstm_ae.pth')
+    # CRITICAL FIX: Changed 'lstm_ae.pth' to 'lstm_autoencoder.pth' to match the training script
+    weight_path = os.path.join(BASE_DIR, 'outputs/generated_midis/lstm_autoencoder.pth')
     model.load_state_dict(torch.load(weight_path, map_location=device))
     model.eval()
     
