@@ -2,49 +2,54 @@ import pretty_midi
 import numpy as np
 
 def load_midi(file_path):
-    """
-    Safely load a MIDI file.
-    """
+    """Safely load a MIDI file."""
     try:
-        midi_data = pretty_midi.PrettyMIDI(file_path)
-        return midi_data
-    except Exception as e:
-        # Some MIDI files are corrupted; we silently catch them
+        return pretty_midi.PrettyMIDI(file_path)
+    except Exception:
         return None
 
 def midi_to_piano_roll(midi_data, fs=16, seq_length=64):
     """
-    Extracts the drum track from a MIDI file and converts it to a 2D numpy array.
+    Custom drum-optimized piano roll extractor.
+    Prevents ultra-short electronic drum hits from being skipped during sampling.
     """
     if midi_data is None:
         return None
         
-    drum_instrument = None
+    end_time = midi_data.get_end_time()
+    if end_time == 0:
+        return None
+        
+    time_steps = int(np.ceil(end_time * fs))
+    if time_steps == 0:
+        return None
+        
+    # Initialize a blank canvas (time_steps, 128 pitches)
+    piano_roll = np.zeros((time_steps, 128))
     
-    # Standard MIDI protocol: Channel 9 (0-indexed) is the drum kit.
-    # However, pretty_midi has an `is_drum` flag we should rely on.
+    # Manually extract every note from every instrument
     for instrument in midi_data.instruments:
-        if instrument.is_drum:
-            drum_instrument = instrument
-            break
+        for note in instrument.notes:
+            start_step = int(note.start * fs)
+            # CRITICAL: Force every drum hit to take up AT LEAST 1 time step
+            # This prevents 0.001s e-drum hits from disappearing
+            end_step = max(start_step + 1, int(np.ceil(note.end * fs)))
             
-    # If no drum track is explicitly flagged, we assume the first track is drums 
-    # (common in loop packs where the whole file is just a drum loop)
-    if drum_instrument is None:
-        if len(midi_data.instruments) > 0:
-            drum_instrument = midi_data.instruments[0]
-        else:
-            return None
+            # Keep within array bounds
+            start_step = min(start_step, time_steps - 1)
+            end_step = min(end_step, time_steps)
+            
+            # Map velocity to 0.0 - 1.0 range
+            if start_step < end_step:
+                current_vel = piano_roll[start_step:end_step, note.pitch]
+                new_vel = note.velocity / 127.0
+                # Use maximum velocity if notes overlap
+                piano_roll[start_step:end_step, note.pitch] = np.maximum(current_vel, new_vel)
 
-    # Get the piano roll (128 pitches x time_steps)
-    # The sampling frequency (fs) determines how many time steps per second.
-    piano_roll = drum_instrument.get_piano_roll(fs=fs)
-    
-    # We want time to go downwards, and pitches across the columns
-    # So we transpose from (128, time_steps) -> (time_steps, 128)
-    piano_roll = piano_roll.T
-    
-    # Normalize the velocities (0-127) to (0.0-1.0)
-    piano_roll = piano_roll / 127.0
-    
+    # CRITICAL: If the track is a short drum fill (e.g., 30 steps), 
+    # we "loop" it (tile it) until it hits our required 64 steps for training.
+    if piano_roll.shape[0] < seq_length:
+        repeats = int(np.ceil(seq_length / piano_roll.shape[0]))
+        piano_roll = np.tile(piano_roll, (repeats, 1))
+        
     return piano_roll
