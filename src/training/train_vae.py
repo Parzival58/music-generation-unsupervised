@@ -20,9 +20,10 @@ def vae_loss_function(recon_x, x, mu, logvar, beta):
     # KL Divergence
     kld_loss = -0.5 * torch.sum(1 + logvar - mu.pow(2) - logvar.exp())
     
-    # Sparsity Penalty: Discourage the model from outputting absolute zero
-    # We want at least a small percentage of notes to be active
-    sparsity_loss = torch.abs(torch.mean(recon_x) - 0.02) * 100
+    # HEAVY Sparsity Guard: If the model predicts silence, the loss explodes
+    # We force the model to target at least 2% note density
+    current_density = torch.mean(recon_x)
+    sparsity_loss = torch.pow(current_density - 0.02, 2) * 5000 
     
     return recon_loss + (beta * kld_loss) + sparsity_loss, recon_loss, kld_loss
 
@@ -47,11 +48,10 @@ def train_vae(epochs=50, batch_size=64, learning_rate=1e-3, num_files=100):
     model = LSTMVAE(seq_length=64).to(device)
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
     
-    print(f"--- Starting VAE Training Loop (Sparsity Guard Active) ---")
+    print(f"--- Starting VAE Training Loop (Aggressive Sparsity Guard) ---")
     for epoch in range(epochs):
         model.train()
-        # Even smaller beta to prioritize keeping the signal alive
-        beta = min(0.005, (epoch / 25.0) * 0.005) 
+        beta = min(0.001, (epoch / 25.0) * 0.001) # Even smaller beta
         
         t_loss_accum, r_loss_accum = 0, 0
         for inputs, _ in dataloader:
@@ -65,7 +65,7 @@ def train_vae(epochs=50, batch_size=64, learning_rate=1e-3, num_files=100):
             t_loss_accum += loss.item()
             r_loss_accum += recon_val.item()
             
-        print(f"Epoch [{epoch+1}/{epochs}] Beta: {beta:.5f} | Total Loss: {t_loss_accum/len(dataloader):.2f} | Recon: {r_loss_accum/len(dataloader):.2f}")
+        print(f"Epoch [{epoch+1}/{epochs}] Total Loss: {t_loss_accum/len(dataloader):.2f} | Recon: {r_loss_accum/len(dataloader):.2f}")
 
     os.makedirs('outputs/generated_midis', exist_ok=True)
     torch.save(model.state_dict(), 'outputs/generated_midis/lstm_vae.pth')
