@@ -7,11 +7,11 @@ sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')
 from src.models.autoencoder import LSTMAutoencoder
 from src.generation.midi_export import piano_roll_to_midi
 
-def generate_ae_samples(num_samples=5, latent_dim=128, seq_length=64):
+def generate_ae_samples(num_samples=5, latent_dim=256, seq_length=64):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    model = LSTMAutoencoder(seq_length=seq_length, latent_dim=latent_dim).to(device)
     
-    # Load the specific Task 1 weights
+    # Initialize with hidden_dim=256 to match the saved weights
+    model = LSTMAutoencoder(seq_length=seq_length, hidden_dim=latent_dim).to(device)
     model.load_state_dict(torch.load('outputs/generated_midis/lstm_ae.pth', map_location=device))
     model.eval()
     
@@ -20,22 +20,17 @@ def generate_ae_samples(num_samples=5, latent_dim=128, seq_length=64):
     
     with torch.no_grad():
         for i in range(num_samples):
-            # Line 10: Generate new music by sampling latent codes z
-            # We scale the random noise by 0.5 because standard autoencoders 
-            # don't have a perfectly smooth N(0,1) latent space like VAEs do.
+            # Scale down the noise to stay within bounds of typical encoded features
             z = torch.randn(1, latent_dim).to(device) * 0.5
             
-            # Decode
-            z_projected = model.decoder_fc(z).unsqueeze(1).repeat(1, seq_length, 1)
-            recon_out, _ = model.decoder_lstm(z_projected)
-            X_hat = model.sigmoid(model.output_fc(recon_out))
-            
+            # Pass z directly to the decoder
+            X_hat = model.decoder(z)
             generated_matrix = X_hat.squeeze(0).cpu().numpy()
             
-            # Line 11: Output MIDI compositions
+            # Clip the linear outputs to a valid 0.0 - 1.0 range
+            generated_matrix = np.clip(generated_matrix, 0.0, 1.0)
             max_val = np.max(generated_matrix)
             
-            # Adaptive thresholding guarantees we don't output blank files
             threshold = max(0.05, max_val * 0.5) if max_val > 0 else 0.1
             
             midi_obj = piano_roll_to_midi(generated_matrix, threshold=threshold)
