@@ -43,7 +43,7 @@ def extract_active_rolls(file_list, seq_length, max_files, threshold=20):
             
     return rolls
 
-def train_autoencoder(epochs=30, batch_size=64, learning_rate=1e-3, seq_length=64, target_genre="funk", num_files=100):
+def train_autoencoder(epochs=20, batch_size=64, learning_rate=1e-3, seq_length=64, target_genre="funk", num_files=100):
     print(f"--- Task 1: Diagnostic Data Run ---")
     
     genre_files = glob.glob(f'data/raw_midi/**/*{target_genre}*.mid', recursive=True)
