@@ -27,7 +27,7 @@ def extract_active_rolls(file_list, seq_length, max_files):
             continue
     return rolls
 
-def train_transformer(epochs=30, batch_size=32, learning_rate=5e-4, seq_length=64, num_files=200):
+def train_transformer(epochs=20, batch_size=32, learning_rate=5e-4, seq_length=64, num_files=200):
     print("--- Task 3: Training Autoregressive Transformer ---")
     
     # Require: Tokenized MIDI dataset D
